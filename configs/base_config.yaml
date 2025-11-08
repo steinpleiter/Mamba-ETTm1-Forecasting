@@ -1,0 +1,111 @@
+# Base Configuration for Mamba-ETTm1 Forecasting
+
+# Data Configuration
+data:
+  dataset: "ETTm1"
+  target_variable: "OT"
+  input_features: ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
+  context_length: 512  # L ∈ {336, 512, 720}
+  forecast_horizon: 96  # H ∈ {24, 48, 96}
+  
+  # Paths
+  paths:
+    data_root: "data"
+    raw_data: "data/raw"
+    processed_data: "data/processed"
+    results: "results"
+  
+  # Data split ratios (time-based)
+  train_ratio: 0.6
+  val_ratio: 0.2
+  test_ratio: 0.2
+  
+  # Preprocessing
+  normalization: "zscore"  # Use train set statistics
+  handle_missing: "forward_fill"  # or "drop_windows"
+  
+  # Calendar features
+  use_calendar_features: true
+  calendar_encodings: ["minute", "hour", "day_of_week", "month"]
+
+# Model Configuration
+model:
+  name: "MambaForecaster"
+  
+  # Mamba backbone
+  n_blocks: 6
+  d_model: 256
+  d_state: 16  # SSM state dimension
+  d_conv: 4    # Convolution kernel size
+  expand_factor: 2
+  dropout: 0.1
+  
+  # Optional components
+  use_positional_encoding: false  # Ablation
+  use_residual_baseline: false     # Ablation (seasonal-naive residual)
+  seasonal_period: 96              # m=96 for 15-min data (daily seasonality)
+  
+  # Head configuration
+  head_type: "conv1d"  # Options: "conv1d", "linear"
+  
+# Training Configuration
+training:
+  # Optimization
+  optimizer: "adamw"
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-5
+  betas: [0.9, 0.999]
+  
+  # Learning rate schedule
+  scheduler: "cosine"
+  warmup_epochs: 5
+  max_epochs: 100
+  
+  # Loss function
+  loss: "smooth_l1"  # Options: "smooth_l1", "mse", "mae"
+  
+  # Training settings
+  batch_size: 32
+  gradient_clip_norm: 1.0
+  use_amp: true  # Automatic Mixed Precision
+  
+  # Early stopping
+  early_stopping:
+    enabled: true
+    patience: 15
+    metric: "val_mae"
+    mode: "min"
+  
+  # Checkpointing
+  save_top_k: 3
+  checkpoint_metric: "val_mae"
+
+# Evaluation Configuration
+evaluation:
+  metrics: ["mae", "mse", "rmse", "mase", "smape"]
+  
+  # Efficiency metrics
+  track_efficiency: true
+  efficiency_metrics: ["throughput", "latency", "peak_vram"]
+
+# Experiment Configuration
+experiment:
+  name: "mamba_base"
+  project: "ETTm1-Forecasting"
+  tags: ["mamba", "ett", "forecasting"]
+  
+  # Logging
+  log_dir: "results/logs"
+  checkpoint_dir: "results/checkpoints"
+  
+  # Reproducibility
+  seed: 42
+  deterministic: true
+
+# Hardware Configuration
+hardware:
+  device: "cuda"  # or "cpu"
+  num_workers: 4
+  pin_memory: true
+  
+

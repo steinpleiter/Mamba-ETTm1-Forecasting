@@ -1,0 +1,67 @@
+Mamba-ETTm1-Forecasting/
+│
+├── README.md                      # Main project documentation
+├── QUICKSTART.md                  # Quick start guide
+├── SETUP_GUIDE.md                 # Detailed setup instructions
+├── PROJECT_STRUCTURE.md           # Directory structure explanation
+├── LICENSE                        # MIT License
+├── .gitignore                     # Git ignore rules
+├── requirements.txt               # Python dependencies
+│
+├── configs/                       # Configuration files
+│   ├── base_config.yaml          # Default configuration
+│   └── experiments/              # Experiment-specific configs
+│       └── .gitkeep
+│
+├── data/                         # Dataset directory (gitignored)
+│   ├── README.md                 # Dataset documentation
+│   ├── raw/                      # Original ETTm1.csv (to download)
+│   └── processed/                # Preprocessed train/val/test splits
+│
+├── src/                          # Source code package
+│   ├── __init__.py
+│   │
+│   ├── data/                     # Data processing
+│   │   ├── __init__.py
+│   │   ├── dataset.py           # PyTorch Dataset classes (TODO)
+│   │   └── preprocessing.py     # Preprocessing utilities (TODO)
+│   │
+│   ├── models/                   # Model architectures
+│   │   ├── __init__.py
+│   │   ├── mamba.py             # Mamba forecasting model (TODO)
+│   │   ├── baseline.py          # Baseline models (TODO)
+│   │   └── utils.py             # Model utilities (TODO)
+│   │
+│   ├── training/                 # Training logic
+│   │   ├── __init__.py
+│   │   ├── trainer.py           # Training loop (TODO)
+│   │   └── losses.py            # Loss functions (TODO)
+│   │
+│   └── evaluation/               # Evaluation and metrics
+│       ├── __init__.py
+│       └── metrics.py           # MAE, MSE, MASE, etc. (TODO)
+│
+├── scripts/                      # Executable scripts
+│   ├── .gitkeep
+│   ├── preprocess_data.py       # Data preprocessing (TODO)
+│   ├── train.py                 # Model training (TODO)
+│   ├── evaluate.py              # Model evaluation (TODO)
+│   └── run_ablations.sh         # Ablation study runner (TODO)
+│
+├── notebooks/                    # Jupyter notebooks
+│   ├── .gitkeep
+│   ├── 01_data_exploration.ipynb         # Data analysis (TODO)
+│   ├── 02_baseline_analysis.ipynb        # Baseline results (TODO)
+│   └── 03_results_visualization.ipynb    # Main results (TODO)
+│
+├── tests/                        # Unit tests
+│   ├── __init__.py
+│   ├── test_data.py             # Data processing tests (TODO)
+│   ├── test_models.py           # Model tests (TODO)
+│   └── test_metrics.py          # Metrics tests (TODO)
+│
+└── results/                      # Experiment outputs (gitignored)
+    ├── logs/                     # Training logs, TensorBoard
+    ├── checkpoints/              # Saved model weights
+    └── figures/                  # Generated plots
+

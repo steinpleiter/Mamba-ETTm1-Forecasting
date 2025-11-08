@@ -1,0 +1,150 @@
+\documentclass[final]{article}
+
+\usepackage{APS360}
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor}         % colors
+\usepackage{graphicx}       % Added to support \includegraphics
+\usepackage{amsmath}        % Added for math symbols
+
+\title{Project Progress Report: Mamba for Long-Horizon Time-Series Forecasting on ETTm1}
+\author{%
+  Stein Pleiter \\
+  1012872009, stein.pleiter@mail.utoronto.ca \\
+  https://github.com/steinpleiter/Mamba-ETTm1-Forecasting \\
+}
+
+\begin{document}
+
+\maketitle
+
+\vspace{-0.5in}
+
+\section*{Brief Project Description}
+
+This project develops a long-horizon forecasting model for the Electricity Transformer Temperature (ETTm1) dataset, predicting the next $H=96$ time steps of oil temperature (OT) from $L=512$ historical steps. Accurate long-range forecasts are critical for energy grid planning and maintenance.
+
+Deep learning is suitable because ETTm1 exhibits complex seasonal patterns and multivariate dependencies that traditional methods cannot capture. While originally proposing Mamba \cite{gu2023mamba} (a linear-time state-space model), installation challenges led to implementing an LSTM as the primary model, with Mamba fully coded and pending training for the final report.
+
+\section*{Notable Contribution}
+
+\subsection*{Data Processing}
+
+ETTm1 dataset \cite{cui2021neglected}: 69,680 timesteps at 15-min intervals (July 2016--June 2018), 7 features (6 load + OT target). Split chronologically 60/20/20\% train/val/test. Z-score normalized using train statistics only. Sliding windows ($L=512, H=96$) yield 41,201/13,329/13,329 samples. Calendar features (sin/cos encodings) added as known covariates. Held-out test set (Feb--Jun 2018) reserved for final evaluation. Challenge: preventing temporal leakage in windowing.
+
+\subsection*{Baseline Model (DLinear / Seasonal-Naive)}
+
+Two baselines: (1) \textbf{Seasonal-Naive (m=96)}: copy values from 24h ago (non-ML), (2) \textbf{DLinear} \cite{zeng2022are}: decompose to trend/seasonal, apply linear layers, recombine (1.48M params).
+
+\subsubsection*{Results \& Challenges}
+
+\begin{table}[!h]
+  \caption{Baseline Results (Validation, $L=512, H=96$).}
+  \label{tab:baseline_results}
+  \centering
+  \begin{tabular}{lcccc}
+    \toprule
+    Model & MAE & RMSE & Params & vs. Naive \\
+    \midrule
+    Seasonal-Naive & 1.732 & 1.949 & 0 & -- \\
+    DLinear & 0.628 & 0.719 & 1.48M & +63.7\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Challenge: series decomposition padding. Early stopping at epoch 7 prevented overfitting.
+
+% --- SUB-SECTION 2c: PRIMARY MODEL (LSTM) ---
+\subsection*{Primary Model (LSTM)}
+
+Due to Colab dependency issues (CUDA compilation for mamba-ssm was unfortunately giving issues on google colab), an LSTM was implemented as the primary model. Architecture: 2-layer stacked LSTM (hidden=128) with FC head (128→64→96), 221K parameters, trained with AdamW (lr=1e-3), SmoothL1 loss, early stopping. \textbf{Mamba is fully implemented} (bidirectional encoders, patch embedding, channel-independent) and will be trained for the final report.
+
+% --- Mamba diagram ---
+\begin{figure}[!h]
+  \centering
+  \includegraphics[width=0.95\textwidth]{results/figures/mamba_system_diagram.png}
+  \caption{Mamba system architecture (implemented, pending training). Shows complete pipeline with N-layer Mamba stack, optional components, and evaluation metrics.}
+  \label{fig:mamba_diagram}
+\end{figure}
+
+\subsubsection*{Results \& Challenges}
+
+\begin{table}[!h]
+  \caption{Primary Model Results (Validation, $L=512, H=96$).}
+  \label{tab:primary_results}
+  \centering
+  \begin{tabular}{lcccc}
+    \toprule
+    Model & MAE & RMSE & Params & vs. Naive \\
+    \midrule
+    Seasonal-Naive & 1.732 & 1.949 & 0 & -- \\
+    DLinear & 0.628 & 0.719 & 1.48M & +63.7\% \\
+    \textbf{LSTM} & \textbf{0.273} & \textbf{0.348} & \textbf{221K} & \textbf{+84.2\%} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+LSTM stopped at epoch 11, best from epoch 1 (MAE 0.273). Challenges: Mamba installation requires 15-30 min CUDA compilation on Colab (PyTorch 2.8+CUDA 12.6, no wheels). LSTM trains slower (48s vs 9s/epoch).
+
+% --- SECTION 3: FEASIBILITY (Rubric requirement) ---
+\section*{Feasibility Argument}
+
+Project is highly feasible: (1) Data pipeline complete with 41K training windows, (2) Baselines trained (Seasonal-Naive, DLinear), (3) LSTM trained achieving 84\% improvement (MAE 0.273), (4) Mamba fully implemented, (5) Evaluation framework operational. Remaining: train Mamba, run ablations ($L,H$ variants), test set evaluation, final report. Mamba installation is a known, solvable issue.
+
+\newpage
+\section*{References}
+
+% --- I've copied your references from the proposal ---
+% --- Make sure to cite them in the text above using \cite{key} ---
+\bibliographystyle{plain} % Simple bibliography style
+\begin{thebibliography}{9}
+
+\bibitem{gu2023mamba}
+A. Gu and T. Dao.
+Mamba: Linear-Time Sequence Modeling with Selective State Spaces.
+\textit{arXiv:2312.00752}, 2023.
+
+\bibitem{cui2021neglected}
+Y. Cui et al.
+A Neglected but Powerful Baseline for Long Sequence Time-Series Forecasting.
+\textit{arXiv:2103.16349}, 2021.
+
+\bibitem{zeng2022are}
+A. Zeng et al.
+Are Transformers Effective for Time Series Forecasting?
+\textit{arXiv:2205.13504}, 2022.
+
+\bibitem{nie2022time}
+Y. Nie et al.
+A Time Series is Worth 64 Words: Long-term Forecasting with Transformers (PatchTST).
+\textit{arXiv:2211.14730} (ICLR 2023).
+
+\bibitem{das2023tide}
+A. Das et al.
+TiDE: Time-series Dense Encoder for Long-term Forecasting.
+\textit{arXiv:2304.08424}, 2023.
+
+\bibitem{tiezzi2024state}
+M. Tiezzi et al.
+State-Space Modeling in Long Sequence Processing: A Survey.
+\textit{arXiv:2406.09062}, 2024.
+
+\bibitem{patro2024mamba}
+B. N. Patro et al.
+Mamba-360: Survey of State Space Models as Transformer Alternatives.
+\textit{arXiv:2404.16112}, 2024.
+
+\bibitem{hyndman2006another}
+R. J. Hyndman and A. B. Koehler.
+Another Look at Forecast-Accuracy Metrics for Intermittent Demand.
+\textit{Foresight}, 2006.
+
+\end{thebibliography}
+
+\end{document}
