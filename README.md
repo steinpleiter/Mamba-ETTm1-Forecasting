@@ -236,15 +236,6 @@ rye run train --config configs/base_config.yaml
 
 # 3. Evaluate
 rye run evaluate --checkpoint results/checkpoints/best_model.pt
-
-# 4. Run tests
-rye run test
-
-# 5. Format code
-rye run format
-
-# 6. Lint code
-rye run lint
 ```
 
 ---
