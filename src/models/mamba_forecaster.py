@@ -276,54 +276,41 @@ class MambaForecaster(nn.Module):
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass with channel-independent processing.
-        
+        Forward pass - only processes target channel (OT).
+
         Args:
             x: (batch, seq_len, enc_in) - multivariate time series
-            
+
         Returns:
             Forecast: (batch, pred_len) - forecast for target variable (last channel)
         """
-        batch_size = x.shape[0]
-        
-        # Process each channel independently
-        channel_forecasts = []
-        
-        for channel_idx in range(self.enc_in):
-            # Extract single channel
-            x_channel = x[:, :, channel_idx:channel_idx+1]  # (batch, seq_len, 1)
-            
-            # Normalize
-            x_channel = x_channel.transpose(1, 2)  # (batch, 1, seq_len)
-            x_channel = self.norm(x_channel)
-            x_channel = x_channel.transpose(1, 2)  # (batch, seq_len, 1)
-            
-            # Patch embedding
-            patches = self.patch_embed(x_channel)  # (batch, n_patches, d_model)
-            
-            # Forward encoder
-            forward_out = self.forward_encoder(patches, reverse=False)
-            
-            # Backward encoder
-            backward_out = self.backward_encoder(patches, reverse=True)
-            
-            # Align backward output
-            backward_out = backward_out.transpose(1, 2)  # (batch, d_model, n_patches)
-            backward_out = self.temporal_align(backward_out)
-            backward_out = backward_out.transpose(1, 2)  # (batch, n_patches, d_model)
-            
-            # Combine forward and backward
-            combined = forward_out + backward_out  # (batch, n_patches, d_model)
-            
-            # Predict for this channel
-            forecast = self.prediction_heads[channel_idx](combined)  # (batch, pred_len)
-            channel_forecasts.append(forecast)
-        
-        # Stack and return only target channel (last one = OT)
-        # For training, we only predict the target variable
-        target_forecast = channel_forecasts[-1]  # (batch, pred_len)
-        
-        return target_forecast
+        # Only process target channel (last one = OT)
+        x_channel = x[:, :, -1:]  # (batch, seq_len, 1)
+
+        # Normalize
+        x_channel = x_channel.transpose(1, 2)  # (batch, 1, seq_len)
+        x_channel = self.norm(x_channel)
+        x_channel = x_channel.transpose(1, 2)  # (batch, seq_len, 1)
+
+        # Patch embedding
+        patches = self.patch_embed(x_channel)  # (batch, n_patches, d_model)
+
+        # Forward encoder
+        forward_out = self.forward_encoder(patches, reverse=False)
+
+        # Backward encoder
+        backward_out = self.backward_encoder(patches, reverse=True)
+
+        # Align backward output
+        backward_out = backward_out.transpose(1, 2)  # (batch, d_model, n_patches)
+        backward_out = self.temporal_align(backward_out)
+        backward_out = backward_out.transpose(1, 2)  # (batch, n_patches, d_model)
+
+        # Combine forward and backward
+        combined = forward_out + backward_out  # (batch, n_patches, d_model)
+
+        # Predict using the last prediction head
+        return self.prediction_heads[-1](combined)
 
 
 def create_mamba_forecaster(
