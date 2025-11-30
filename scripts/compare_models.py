@@ -28,34 +28,24 @@ def main():
     
     # Load all available results
     models = {}
-    
+
     # Baseline
     seasonal_naive = load_results('seasonal_naive_baseline_results.pkl')
     if seasonal_naive:
         models['Seasonal Naive'] = seasonal_naive
-    
-    # DLinear
-    dlinear = load_results('dlinear_training_results.pkl')
+
+    # DLinear ETTm1
+    dlinear = load_results('dlinear_ETTm1_training_results.pkl')
     if dlinear:
         models['DLinear'] = dlinear
-    
-    # DLinear ETTm2
-    dlinear_ettm2 = load_results('dlinear_ETTm2_training_results.pkl')
-    if dlinear_ettm2:
-        models['DLinear (ETTm2)'] = dlinear_ettm2
-    
-    # LSTM
-    lstm = load_results('lstm_training_results.pkl')
+
+    # LSTM ETTm1
+    lstm = load_results('lstm_ETTm1_training_results.pkl')
     if lstm:
         models['LSTM'] = lstm
-    
-    # LSTM ETTm1
-    lstm_ettm1 = load_results('lstm_ETTm1_training_results.pkl')
-    if lstm_ettm1:
-        models['LSTM (ETTm1)'] = lstm_ettm1
-    
-    # Mamba
-    mamba = load_results('mamba_training_results.pkl')
+
+    # Mamba ETTm1
+    mamba = load_results('mamba_ETTm1_training_results.pkl')
     if mamba:
         models['Mamba'] = mamba
     
@@ -158,7 +148,8 @@ def main():
         test_maes = [models[name].get('test_metrics', models[name].get('val_metrics', {})).get('mae', np.nan) 
                      for name in model_names]
         
-        colors = ['red' if 'Naive' in name else 'orange' if 'DLinear' in name else 'green' 
+        colors = ['red' if 'Naive' in name else 'orange' if 'DLinear' in name
+                  else 'blue' if 'LSTM' in name else 'green'
                   for name in model_names]
         
         bars = ax.bar(model_names, test_maes, color=colors, alpha=0.7, edgecolor='black', linewidth=1.5)
