@@ -78,10 +78,11 @@ def main(args):
     processed_data_path = Path(data_config['paths']['processed_data'])
     context_length = data_config['context_length']
     forecast_horizon = data_config['forecast_horizon']
-    
-    train_path = processed_data_path / f"train_L{context_length}_H{forecast_horizon}.pkl"
-    val_path = processed_data_path / f"val_L{context_length}_H{forecast_horizon}.pkl"
-    test_path = processed_data_path / f"test_L{context_length}_H{forecast_horizon}.pkl"
+    dataset_name = data_config.get('dataset', 'ETTm1')
+
+    train_path = processed_data_path / f"{dataset_name}_train_L{context_length}_H{forecast_horizon}.pkl"
+    val_path = processed_data_path / f"{dataset_name}_val_L{context_length}_H{forecast_horizon}.pkl"
+    test_path = processed_data_path / f"{dataset_name}_test_L{context_length}_H{forecast_horizon}.pkl"
     
     # Device
     if args.device == 'cuda' and torch.cuda.is_available():

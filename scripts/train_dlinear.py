@@ -52,20 +52,20 @@ def train_epoch(model, dataloader, optimizer, criterion, device, use_amp=False):
     total_loss = 0.0
     n_batches = 0
     
-    scaler = torch.cuda.amp.GradScaler() if use_amp else None
-    
+    scaler = torch.amp.GradScaler('cuda') if use_amp else None
+
     pbar = tqdm(dataloader, desc="Training")
     for batch in pbar:
         inputs = batch['input'].to(device)
         targets = batch['target'].to(device)
-        
+
         optimizer.zero_grad()
-        
+
         if use_amp:
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast('cuda'):
                 predictions = model(inputs)
                 loss = criterion(predictions, targets)
-            
+
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
