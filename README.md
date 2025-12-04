@@ -1,4 +1,4 @@
-# Mamba for Long-Horizon Time-Series Forecasting on ETTm1
+# Mamba vs. LSTM: Long-Horizon Time-Series Forecasting on ETTm1
 
 **Author:** Stein Pleiter (1012872009)
 **Email:** stein.pleiter@mail.utoronto.ca
@@ -8,252 +8,170 @@
 
 ## Introduction
 
-### Goal
+Efficient forecasting of electricity transformer oil temperature (OT) is critical for grid stability and preventing equipment failure. Long-horizon forecasting (H = 96 steps) is particularly challenging due to error accumulation and complex temporal dependencies.
 
-Build a forecasting model for the Electricity Transformer Temperature dataset (ETTm1) that predicts the next **H** time steps of oil temperature (OT) from a long history **L**. This project leverages **Mamba**, a recent state-space sequence model that runs in linear time and handles long context efficiently.
+This project evaluates **Mamba**, a novel linear-time State Space Model (SSM), against a robust **LSTM** baseline and **DLinear** on the ETTm1 dataset. We investigate whether Mamba's computational benefits translate to performance gains on mid-sized time-series data.
 
-### Why This Is Interesting
+---
 
-Many real-world systems (energy, traffic, sensors) need forecasts over long horizons but have limited compute. While Transformers deliver strong results, they suffer from quadratic complexity with sequence length. Mamba is designed to be faster while maintaining accuracy, making it well-suited for long-horizon forecasting tasks.
+## Results Summary
 
-## System Overview
+| Model | MAE | RMSE | MASE | Params | vs. Naive |
+|-------|-----|------|------|--------|-----------|
+| Seasonal Naive | 1.123 | 1.406 | 28.72 | 0 | 0.0% |
+| DLinear | 0.625 | 0.717 | 15.99 | 1.48M | +44.3% |
+| Mamba | 0.469 | 0.534 | 11.99 | 161k | +58.2% |
+| **LSTM** | **0.280** | **0.342** | **7.16** | 221k | **+75.1%** |
 
-```
-Past L steps + calendar features 
-    ↓
-Mamba Stack (Linear-time SSM with N=6 blocks)
-    ↓
-Conv1D head (L → H mapping)
-    ↓
-Forecast Ŷ_{t+1:t+H} (OT)
-```
-
-**Optional components:**
-
-- Future calendar conditioning
-- Residual connection with daily seasonal-naive baseline (m=96)
+**Key Finding:** LSTM outperformed Mamba on this mid-sized dataset (L=512), achieving a 40% reduction in MAE. While Mamba offers linear scaling benefits for very long sequences, LSTM's recurrence mechanism proved more effective at this context length.
 
 ---
 
 ## Dataset: ETTm1
 
 - **Source:** Electricity Transformer Temperature dataset
-- **Resolution:** 15-minute intervals
-- **Input Features:** HUFL, HULL, MUFL, MULL, LUFL, LULL, OT
-- **Target Variable:** OT (Oil Temperature)
-- **Split:** Time-based train/validation/test split (no data leakage)
+- **Resolution:** 15-minute intervals (96 steps = 24 hours)
+- **Features:** HUFL, HULL, MUFL, MULL, LUFL, LULL, OT (7 total)
+- **Target:** OT (Oil Temperature)
 
-### Preprocessing Pipeline
+### Data Statistics
 
-1. **Timestamp parsing:** Verify 15-min spacing; handle gaps via forward-fill or window dropping
-2. **Standardization:** Z-score normalization using train set statistics only
-3. **Sliding windows:**
-   - Context lengths: L ∈ {336, 512, 720}
-   - Forecast horizons: H ∈ {24, 48, 96}
-4. **Calendar features:** Sin/cos encodings for minute, hour, day-of-week, month (known future information)
-5. **Leakage prevention:** Only past values and known future calendars used; no future targets
+| Split | Samples | Mean OT | Std OT |
+|-------|---------|---------|--------|
+| Train | 41,808 | 0.00 | 1.00 |
+| Val | 13,936 | −1.21 | 0.52 |
+| Test | 13,936 | −1.12 | 0.41 |
+
+*Z-score normalized using training set statistics only (no leakage).*
+
+### Preprocessing
+
+1. **Cleaning:** No missing values found
+2. **Split:** Strict chronological 60/20/20 split
+3. **Normalization:** Z-score (μ=0, σ=1) fitted on training data only
+4. **Windowing:** Input L=512, Horizon H=96
+5. **Calendar Features:** Sin/cos encodings of Minute, Hour, Day of Week, Month
 
 ---
 
 ## Architecture
 
-### Backbone: Mamba
+### LSTM (Baseline)
+- 2-layer stacked LSTM
+- hidden_size=128
+- Linear projection head
+- **220,832 parameters**
 
-- **Blocks:** N = 6 stacked Mamba blocks
-- **Model dimension:** d_model = 256
-- **Input projection:** d_in → d_model
-- **Dropout:** Applied for regularization
-- **Positional encoding:** Optional learned positional bias (ablation study)
+### Mamba (Primary)
+- d_model=32, n_layers=1
+- patch_len=16, dropout=0.3
+- **161,374 parameters**
 
-### Prediction Head
+### DLinear
+- Decomposition-linear model
+- Trend + seasonal components
+- **1,477,440 parameters**
 
-- **One-shot forecasting:** Predict all H steps simultaneously
-- **Architecture:**
-  - 1D convolution: sequence length L → H
-  - Linear layer: output OT predictions
-- **Residual option:** Learn delta from daily seasonal baseline (m=96)
-
-### Exogenous Feature Fusion
-
-- Calendar features condition hidden states via small MLP
-- Treated as ablation component
-
----
-
-## Training Configuration
-
-- **Optimizer:** AdamW with cosine learning rate schedule + warmup
-- **Mixed Precision:** AMP (Automatic Mixed Precision)
-- **Loss Function:** SmoothL1
-- **Early Stopping:** Based on validation MAE
-- **Metrics:** MAE, MSE, RMSE, MASE, sMAPE
-- **Efficiency Metrics:** Throughput, latency, peak VRAM
+### Seasonal Naive
+- Non-learning baseline
+- ŷ[t+h] = y[t+h−96] (copies from 24h ago)
 
 ---
 
-## Baseline Models
+## Key Observations
 
-1. **DLinear-style model:** Lightweight linear decomposition baseline
-2. **Seasonal-naive:** Copy values from H steps earlier (m=96 for daily seasonality)
+### Distribution Shift
+The systematic offset in predictions is caused by non-stationarity:
+- **Train period:** July 2016 – Sept 2017 (warmer, ~17°C mean)
+- **Test period:** Feb 2018 – June 2018 (colder, ~8°C mean)
 
-These baselines demonstrate the value-add of the Mamba architecture.
+Normalizing with training statistics anchored models to warmer temperatures, causing positive bias on colder test data.
 
----
-
-## Evaluation Metrics
-
-- **MAE (Mean Absolute Error):** Primary metric for early stopping
-- **MSE (Mean Squared Error):** Standard regression metric
-- **RMSE (Root Mean Squared Error):** Same units as target variable
-- **MASE (Mean Absolute Scaled Error):** Compares against seasonal baseline
-- **sMAPE (Symmetric Mean Absolute Percentage Error):** Scale-independent metric
+### Mamba vs. LSTM
+- LSTM captures sharp peaks and troughs more precisely
+- Mamba tends to smooth high-frequency variations
+- For L=512, LSTM's recurrence mechanism provides stronger inductive bias
 
 ---
 
-## Experiments & Ablations
-
-Planned ablation studies:
-
-- [ ] Context length: L ∈ {336, 512, 720}
-- [ ] Forecast horizon: H ∈ {24, 48, 96}
-- [ ] Positional encoding: with vs. without
-- [ ] Calendar features: with vs. without
-- [ ] Residual baseline: with vs. without
-- [ ] Model depth: varying N (number of Mamba blocks)
-
----
-
-## Ethical Considerations
-
-- **Distribution shift:** Model trained on one period may underperform on different periods
-- **Decision impact:** Forecasts can influence planning decisions in energy systems
-- **Mitigation strategies:**
-  - Strict time-based splits (no future information leakage)
-  - Clear reporting of metrics and confidence intervals
-  - Code and configuration release for reproducibility
-
----
-
-## Project Motivation
-
-This project explores the intersection of modern state-space models and practical time-series forecasting. After working on image classification tasks (CAPTCHA detection at 98% accuracy, breast cancer histopathology at 80-95% accuracy), this project deliberately shifts focus to long-horizon sequence forecasting.
-
-**Why Mamba?** It offers a genuinely new approach—linear-time complexity as an alternative to attention mechanisms—while remaining solo-feasible and scientifically interesting. The project pairs solid engineering practices (clean splits, leakage checks, comprehensive baselines) with a cutting-edge model family.
-
----
-
-## Repository Structure
+## Project Structure
 
 ```
 Mamba-ETTm1-Forecasting/
-├── README.md                 # This file
-├── requirements.txt          # Python dependencies
-├── setup.py                  # Package setup (optional)
-├── .gitignore               # Git ignore rules
-│
-├── data/                    # Data directory (not committed)
-│   ├── raw/                 # Original ETTm1 data
-│   ├── processed/           # Preprocessed datasets
-│   └── README.md            # Data documentation
-│
-├── src/                     # Source code
-│   ├── __init__.py
-│   ├── data/                # Data processing
-│   │   ├── __init__.py
-│   │   ├── dataset.py       # PyTorch Dataset classes
-│   │   └── preprocessing.py # Preprocessing utilities
-│   │
-│   ├── models/              # Model architectures
-│   │   ├── __init__.py
-│   │   ├── mamba.py         # Mamba backbone
-│   │   ├── baseline.py      # DLinear and seasonal-naive
-│   │   └── utils.py         # Model utilities
-│   │
-│   ├── training/            # Training logic
-│   │   ├── __init__.py
-│   │   ├── trainer.py       # Training loop
-│   │   └── losses.py        # Loss functions
-│   │
-│   └── evaluation/          # Evaluation and metrics
-│       ├── __init__.py
-│       └── metrics.py       # MAE, MSE, MASE, etc.
-│
 ├── configs/                 # Configuration files
-│   ├── base_config.yaml     # Base configuration
-│   └── experiments/         # Experiment-specific configs
-│
-├── scripts/                 # Executable scripts
-│   ├── preprocess_data.py   # Data preprocessing
-│   ├── train.py             # Training script
-│   ├── evaluate.py          # Evaluation script
-│   └── run_ablations.sh     # Ablation study runner
-│
+│   └── base_config.yaml
+├── data/
+│   ├── raw/                 # Original ETTm1.csv
+│   └── processed/           # Preprocessed .pkl files
 ├── notebooks/               # Jupyter notebooks
-│   ├── 01_data_exploration.ipynb
-│   ├── 02_baseline_analysis.ipynb
-│   └── 03_results_visualization.ipynb
-│
-├── tests/                   # Unit tests
-│   ├── __init__.py
-│   ├── test_data.py
-│   ├── test_models.py
-│   └── test_metrics.py
-│
-└── results/                 # Experiment results (not committed)
-    ├── logs/                # Training logs
-    ├── checkpoints/         # Model checkpoints
-    └── figures/             # Generated plots
+│   └── Colab_Setup.ipynb    # Google Colab training notebook
+├── scripts/
+│   ├── train_mamba.py       # Mamba training script
+│   ├── train_lstm.py        # LSTM training script
+│   ├── train_dlinear.py     # DLinear training script
+│   └── preprocess_data.py   # Data preprocessing
+├── src/
+│   ├── data/                # Dataset and preprocessing
+│   ├── models/              # Model architectures
+│   ├── training/            # Training utilities
+│   └── evaluation/          # Metrics
+└── results/
+    ├── checkpoints/         # Saved models
+    └── figures/             # Visualizations
 ```
 
 ---
 
 ## Getting Started
 
-### Installation with Rye
-
-This project uses [Rye](https://rye-up.com/) for dependency management.
+### Installation
 
 ```bash
 # Clone the repository
 git clone https://github.com/steinpleiter/Mamba-ETTm1-Forecasting.git
 cd Mamba-ETTm1-Forecasting
 
-# Sync dependencies (automatically creates venv and installs everything)
+# Using Rye (recommended)
 rye sync
 
-# Activate the virtual environment (optional, rye run handles this)
-. .venv/bin/activate  # On Windows: .venv\Scripts\activate
+# Or using pip
+pip install -r requirements.txt
 ```
 
-### Quick Start
+### Training
 
 ```bash
-# 1. Download and preprocess data
-rye run preprocess
+# Preprocess data
+rye run python scripts/preprocess_data.py
 
-# 2. Train the model
-rye run train --config configs/base_config.yaml
+# Train LSTM
+rye run python scripts/train_lstm.py --device mps --epochs 30
 
-# 3. Evaluate
-rye run evaluate --checkpoint results/checkpoints/best_model.pt
+# Train Mamba (requires CUDA)
+rye run python scripts/train_mamba.py --device cuda --epochs 50 --d_model 32 --n_layers 1
+
+# Train DLinear
+rye run python scripts/train_dlinear.py --device mps --epochs 30
 ```
+
+### Google Colab
+For Mamba training with CUDA support, use `notebooks/Colab_Setup.ipynb`.
+
+---
+
+## Ethical Considerations
+
+- **Distribution shift risk:** Models trained on historical data may fail during anomalous events (e.g., extreme weather)
+- **Mitigation:** Strict time-based splits, comprehensive baseline comparisons, transparent reporting
+- **Efficiency:** Mamba's linear complexity offers a path toward lower-carbon AI training
 
 ---
 
 ## References
 
-**Gu, A., & Dao, T.** (2023). Mamba: Linear-Time Sequence Modeling with Selective State Spaces. *arXiv:2312.00752*
-
-**Cui, Y., et al.** (2021). A Neglected but Powerful Baseline for Long Sequence Time-Series Forecasting. *arXiv:2103.16349*
-
-**Zeng, A., et al.** (2022). Are Transformers Effective for Time Series Forecasting? *arXiv:2205.13504*
-
-**Nie, Y., et al.** (2023). A Time Series is Worth 64 Words: Long-term Forecasting with Transformers (PatchTST). *ICLR 2023, arXiv:2211.14730*
-
-**Das, A., et al.** (2024). TiDE: Time-series Dense Encoder for Long-term Forecasting. *arXiv:2304.08424*
-
-**Tiezzi, M., et al.** (2025). State-Space Modeling in Long Sequence Processing: A Survey. *arXiv:2406.09062*
-
-**Patro, B. N., et al.** (2024). Mamba-360: Survey of State Space Models as Transformer Alternatives. *arXiv:2404.16112*
-
-**Hyndman, R. J., & Koehler, A. B.** (2006). Another Look at Forecast-Accuracy Metrics for Intermittent Demand. *Foresight*
+1. Gu, A., & Dao, T. (2023). Mamba: Linear-Time Sequence Modeling with Selective State Spaces. *arXiv:2312.00752*
+2. Cui, Y., et al. (2021). A Neglected but Powerful Baseline for Long Sequence Time-Series Forecasting. *arXiv:2103.16349*
+3. Zeng, A., et al. (2022). Are Transformers Effective for Time Series Forecasting? *arXiv:2205.13504*
+4. Nie, Y., et al. (2023). A Time Series is Worth 64 Words: Long-term Forecasting with Transformers (PatchTST). *arXiv:2211.14730*
+5. Das, A., et al. (2023). TiDE: Time-series Dense Encoder for Long-term Forecasting. *arXiv:2304.08424*
+6. Zhou, H., et al. (2021). Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting. *AAAI*
