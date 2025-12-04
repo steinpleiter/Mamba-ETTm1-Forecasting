@@ -91,3 +91,5 @@ dmypy.json
 # Profiling
 *.prof
 
+*.pkl
+*pt
